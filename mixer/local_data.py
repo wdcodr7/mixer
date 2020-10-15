@@ -69,5 +69,5 @@ def create_cache_file(path: Path, cache_path: Path, data: bytes):
     with open(cache_path, "wb") as f:
         f.write(data)
 
-    with open(cache_path + ".metadata", "w") as f:
+    with open(str(cache_path + ".metadata"), "w") as f:
         f.write(path)

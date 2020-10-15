@@ -52,7 +52,7 @@ def get_or_create_cache_file(str_path: str, data: bytes):
         return str_path
 
     cache_path = get_cache_file_hash(path)
-    if not cache_path.exists():
+    if not cache_path.with_suffix(".metadata").exists():
         create_cache_file(path, cache_path, data)
     return str(cache_path)
 
@@ -69,5 +69,5 @@ def create_cache_file(path: Path, cache_path: Path, data: bytes):
     with open(cache_path, "wb") as f:
         f.write(data)
 
-    with open(str(cache_path + ".metadata"), "w") as f:
+    with open(cache_path.with_suffix(".metadata"), "w") as f:
         f.write(path)

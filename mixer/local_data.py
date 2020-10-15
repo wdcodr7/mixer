@@ -36,36 +36,36 @@ def get_data_directory():
         logger.error(
             f"MIXER_DATA_DIR env var set to {data_path}, but directory does not exists. Falling back to default location."
         )
-    return os.path.join(os.fspath(tempfile.gettempdir()), "mixer", "data")
+    return Path(os.fspath(tempfile.gettempdir())) / "mixer" / "data"
 
 
-def get_resolved_file_path(path: str):
-    if os.path.exists(path):
+def get_resolved_file_path(path: Path):
+    if path.exists():
         return path
 
     return get_cache_file_hash(path)
 
 
-def get_or_create_cache_file(path: str, data: bytes):
-    if os.path.exists(path):
+def get_or_create_cache_file(path: Path, data: bytes):
+    if path.exists():
         return path
 
     cache_path = get_cache_file_hash(path)
-    if os.path.exists(cache_path):
+    if cache_path.exists():
         return cache_path
 
     create_cache_file(path, cache_path, data)
     return cache_path
 
 
-def get_cache_file_hash(path: str):
+def get_cache_file_hash(path: Path):
     m = hashlib.sha1()
-    m.update(path.encode())
-    return get_data_directory() + "/images/" + str(m.hexdigest())
+    m.update(str(path).encode())
+    return get_data_directory() / "images" / str(m.hexdigest() + path.suffix)
 
 
-def create_cache_file(path: str, cache_path: str, data: bytes):
-    os.makedirs(Path(cache_path).parent.absolute())
+def create_cache_file(path: Path, cache_path: Path, data: bytes):
+    cache_path.parent.absolute().makedirs(parents=True)
 
     with open(cache_path, "wb") as f:
         f.write(data)

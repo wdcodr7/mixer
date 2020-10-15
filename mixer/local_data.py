@@ -64,7 +64,7 @@ def get_cache_file_hash(path: Path):
 
 
 def create_cache_file(path: Path, cache_path: Path, data: bytes):
-    cache_path.parent.absolute().makedirs(parents=True)
+    cache_path.parent.mkdir(parents=True)
 
     with open(cache_path, "wb") as f:
         f.write(data)

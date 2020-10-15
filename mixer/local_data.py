@@ -36,7 +36,7 @@ def get_data_directory():
         logger.error(
             f"MIXER_DATA_DIR env var set to {data_path}, but directory does not exists. Falling back to default location."
         )
-    return Path(os.fspath(tempfile.gettempdir())) / "mixer" / "data"
+    return str(Path(os.fspath(tempfile.gettempdir())) / "mixer" / "data")
 
 
 def get_resolved_file_path(path: Path):
@@ -61,7 +61,7 @@ def get_or_create_cache_file(path: Path, data: bytes):
 def get_cache_file_hash(path: Path):
     m = hashlib.sha1()
     m.update(str(path).encode())
-    return get_data_directory() / "images" / str(m.hexdigest() + path.suffix)
+    return Path(get_data_directory()) / "images" / str(m.hexdigest() + path.suffix)
 
 
 def create_cache_file(path: Path, cache_path: Path, data: bytes):

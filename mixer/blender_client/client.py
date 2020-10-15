@@ -372,7 +372,7 @@ class BlenderClient(Client):
                     return image.name_full
                 else:
                     self.send_texture_file(path)
-                    return path
+                    return get_source_file_path(path)
         return None
 
     def insert_key(self, ob, channel, channel_index, frame, value, interpolation):

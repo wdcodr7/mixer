@@ -19,6 +19,8 @@ import logging
 from mixer.broadcaster import common
 from mixer.broadcaster.client import Client
 from mixer.share_data import share_data
+from mixer.local_data import get_resolved_file_path
+
 import bpy
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,7 @@ def build_texture(principled, material, channel, is_color, data, index):
     if len(file_name) > 0:
         tex_image = material.node_tree.nodes.new("ShaderNodeTexImage")
         try:
-            tex_image.image = bpy.data.images.load(file_name)
+            tex_image.image = bpy.data.images.load(get_resolved_file_path(file_name))
             if not is_color:
                 tex_image.image.colorspace_settings.name = "Non-Color"
         except Exception as e:
@@ -83,10 +85,10 @@ def build_material(data):
         material.node_tree.links.new(principled.inputs["Transmission"], invert.outputs["Color"])
         tex_image = material.node_tree.nodes.new("ShaderNodeTexImage")
         try:
-            tex_image.image = bpy.data.images.load(file_name)
+            tex_image.image = bpy.data.images.load(get_resolved_file_path(file_name))
             tex_image.image.colorspace_settings.name = "Non-Color"
         except Exception as e:
-            logger.error("could not load file %s ...", file_name)
+            logger.error("could not load file %s ...", get_resolved_file_path(file_name))
             logger.error("... %s", e)
         material.node_tree.links.new(invert.inputs["Color"], tex_image.outputs["Color"])
 
@@ -113,10 +115,10 @@ def build_material(data):
         material.node_tree.links.new(principled.inputs["Normal"], normal_map.outputs["Normal"])
         tex_image = material.node_tree.nodes.new("ShaderNodeTexImage")
         try:
-            tex_image.image = bpy.data.images.load(file_name)
+            tex_image.image = bpy.data.images.load(get_resolved_file_path(file_name))
             tex_image.image.colorspace_settings.name = "Non-Color"
         except Exception as e:
-            logger.error("could not load file %s ...", file_name)
+            logger.error("could not load file %s ...", get_resolved_file_path(file_name))
             logger.error("... %s", e)
         material.node_tree.links.new(normal_map.inputs["Color"], tex_image.outputs["Color"])
 

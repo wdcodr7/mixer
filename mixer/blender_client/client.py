@@ -64,6 +64,7 @@ from mixer.draw_handlers import set_draw_handlers
 
 from mixer.blender_client.camera import send_camera
 from mixer.blender_client.light import send_light
+from mixer.local_data import get_or_create_cache_file
 
 logger = logging.getLogger(__name__)
 
@@ -333,16 +334,10 @@ class BlenderClient(Client):
 
     def build_texture_file(self, data):
         path, index = common.decode_string(data, 0)
-        if not os.path.exists(path):
-            size, index = common.decode_int(data, index)
-            try:
-                f = open(path, "wb")
-                f.write(data[index : index + size])
-                f.close()
-                self.textures.add(path)
-            except Exception as e:
-                logger.error("could not write file %s ...", path)
-                logger.error("... %s", e)
+        size, index = common.decode_int(data, index)
+
+        get_or_create_cache_file(path, data[index : index + size])
+        self.textures.add(path)
 
     def send_texture_file(self, path):
         if path in self.textures:

@@ -39,23 +39,22 @@ def get_data_directory():
     return str(Path(os.fspath(tempfile.gettempdir())) / "mixer" / "data")
 
 
-def get_resolved_file_path(path: Path):
-    if path.exists():
+def get_resolved_file_path(path: str):
+    if os.path.exists(path):
         return path
 
-    return get_cache_file_hash(path)
+    return str(get_cache_file_hash(Path(path)))
 
 
-def get_or_create_cache_file(path: Path, data: bytes):
+def get_or_create_cache_file(str_path: str, data: bytes):
+    path = Path(str_path)
     if path.exists():
-        return path
+        return str_path
 
     cache_path = get_cache_file_hash(path)
-    if cache_path.exists():
-        return cache_path
-
-    create_cache_file(path, cache_path, data)
-    return cache_path
+    if not cache_path.exists():
+        create_cache_file(path, cache_path, data)
+    return str(cache_path)
 
 
 def get_cache_file_hash(path: Path):

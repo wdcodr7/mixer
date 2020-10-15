@@ -64,7 +64,7 @@ from mixer.draw_handlers import set_draw_handlers
 
 from mixer.blender_client.camera import send_camera
 from mixer.blender_client.light import send_light
-from mixer.local_data import get_or_create_cache_file
+from mixer.local_data import get_or_create_cache_file, get_source_file_path
 
 logger = logging.getLogger(__name__)
 
@@ -347,7 +347,7 @@ class BlenderClient(Client):
                 f = open(path, "rb")
                 data = f.read()
                 f.close()
-                self.send_texture_data(path, data)
+                self.send_texture_data(get_source_file_path(path), data)
             except Exception as e:
                 logger.error("could not read file %s ...", path)
                 logger.error("... %s", e)

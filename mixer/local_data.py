@@ -46,6 +46,14 @@ def get_resolved_file_path(path: str):
     return str(get_cache_file_hash(Path(path)))
 
 
+def get_source_file_path(cache_path: str):
+    metadata_path = Path(cache_path).with_suffix(".metadata")
+    if not metadata_path.exists():
+        return cache_path
+
+    return metadata_path.read_text()
+
+
 def get_or_create_cache_file(str_path: str, data: bytes):
     path = Path(str_path)
     if path.exists():
@@ -64,10 +72,10 @@ def get_cache_file_hash(path: Path):
 
 
 def create_cache_file(path: Path, cache_path: Path, data: bytes):
-    cache_path.parent.mkdir(parents=True)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(cache_path, "wb") as f:
         f.write(data)
 
     with open(cache_path.with_suffix(".metadata"), "w") as f:
-        f.write(path)
+        f.write(str(path))

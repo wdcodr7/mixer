@@ -109,6 +109,15 @@ class SendSceneContentFailed(Exception):
     pass
 
 
+class TextureData:
+    def __init__(self, *args, **kwargs):
+        self.path = kwargs.get("path")
+        self.packed = kwargs.get("packed")
+        self.data = kwargs.get("data")
+        self.width = kwargs.get("width")
+        self.height = kwargs.get("height")
+
+
 class BlenderClient(Client):
     """
     Client specialized for Blender. Extends Client base class by adding and handling data related to Blender.
@@ -123,7 +132,7 @@ class BlenderClient(Client):
         # Is set to True for messages emitted from a frame change event
         self.synced_time_messages = False
 
-        self.textures: Set[str] = set()
+        self.textures: Dict[str, TextureData] = dict()
 
         self.skip_next_depsgraph_update = False
         # skip_next_depsgraph_update is set to True in the main timer function when a received command
@@ -334,28 +343,48 @@ class BlenderClient(Client):
 
     def build_texture_file(self, data):
         path, index = common.decode_string(data, 0)
+        packed, index = common.decode_bool(data, index)
+        width, index = common.decode_int(data, index)
+        height, index = common.decode_int(data, index)
         size, index = common.decode_int(data, index)
+        buffer = buffer = data[index : index + size]
+        if not packed:
+            get_or_create_cache_file(path, buffer)
+            buffer = None
 
-        get_or_create_cache_file(path, data[index : index + size])
-        self.textures.add(path)
+        self.textures[path] = TextureData(path=path, packed=packed, data=buffer, width=width, height=height)
 
-    def send_texture_file(self, path):
-        if path in self.textures:
+    def send_texture_file(self, path, width, height):
+        texture_data = self.textures.get(path)
+        if texture_data is not None and texture_data.packed:
             return
         if os.path.exists(path):
             try:
                 f = open(path, "rb")
                 data = f.read()
                 f.close()
-                self.send_texture_data(get_source_file_path(path), data)
+                self.send_texture_data(get_source_file_path(path), False, width, height, data)
             except Exception as e:
                 logger.error("could not read file %s ...", path)
                 logger.error("... %s", e)
 
-    def send_texture_data(self, path, data):
+    def send_texture_data(self, path, packed, width, height, data):
         name_buffer = common.encode_string(path)
-        self.textures.add(path)
-        self.add_command(common.Command(MessageType.TEXTURE, name_buffer + common.encode_int(len(data)) + data, 0))
+        self.textures[path] = TextureData(
+            path=path, packed=packed, width=width, height=height, data=data if packed else None
+        )
+        self.add_command(
+            common.Command(
+                MessageType.TEXTURE,
+                name_buffer
+                + common.encode_bool(packed)
+                + common.encode_int(width)
+                + common.encode_int(height)
+                + common.encode_int(len(data))
+                + data,
+                0,
+            )
+        )
 
     def get_texture(self, inputs):
         if not inputs:
@@ -368,10 +397,10 @@ class BlenderClient(Client):
                 path = bpy.path.abspath(image.filepath)
                 path = path.replace("\\", "/")
                 if pack:
-                    self.send_texture_data(image.name_full, pack.data)
-                    return image.name_full
+                    self.send_texture_data(path, pack is not None, image.size[0], image.size[1], pack.data)
+                    return path
                 else:
-                    self.send_texture_file(path)
+                    self.send_texture_file(path, image.size[0], image.size[1])
                     return get_source_file_path(path)
         return None
 

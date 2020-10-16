@@ -41,9 +41,23 @@ def get_or_create_material(material_name):
 def build_texture(principled, material, channel, is_color, data, index):
     file_name, index = common.decode_string(data, index)
     if len(file_name) > 0:
-        tex_image = material.node_tree.nodes.new("ShaderNodeTexImage")
+
+        tex_image = None
+        for link in material.node_tree.links:
+            if link.to_socket == principled.inputs[channel]:
+                connected_node = link.from_socket.node
+                if connected_node.type == "TEX_IMAGE":
+                    tex_image = connected_node
+                    break
+
+        if tex_image is None:
+            tex_image = material.node_tree.nodes.new("ShaderNodeTexImage")
+
+        resolved_filename = get_resolved_file_path(file_name)
+        if tex_image.image and tex_image.image.filepath == resolved_filename:
+            return index
         try:
-            tex_image.image = bpy.data.images.load(get_resolved_file_path(file_name))
+            tex_image.image = bpy.data.images.load(resolved_filename)
             if not is_color:
                 tex_image.image.colorspace_settings.name = "Non-Color"
         except Exception as e:

@@ -68,7 +68,7 @@ class DatablockProxy(StructProxy):
             ("edges"): ...
         }"""
 
-        self._media = Optional[Tuple[str, bytes]]
+        self._media: Optional[Tuple[str, bytes]] = None
 
     def init(self, datablock: T.ID):
         if datablock is not None:
@@ -153,7 +153,7 @@ class DatablockProxy(StructProxy):
             self._datablock_uuid = bl_instance.mixer_uuid
             context.proxy_state.proxies[uuid] = self
 
-        self.attach_media_descriptor(id_)
+        self.attach_media_descriptor(bl_instance)
         return self
 
     def attach_media_descriptor(self, datablock: T.ID):

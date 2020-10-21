@@ -24,6 +24,7 @@ import logging
 import tempfile
 from pathlib import Path
 import hashlib
+import bpy
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,10 @@ def get_resolved_file_path(path: str):
 
 
 def get_source_file_path(cache_path: str):
-    metadata_path = Path(cache_path).with_suffix(".metadata")
+    path = bpy.path.abspath(cache_path)
+    metadata_path = Path(path).with_suffix(".metadata")
     if not metadata_path.exists():
-        return cache_path
+        return path
 
     return metadata_path.read_text()
 

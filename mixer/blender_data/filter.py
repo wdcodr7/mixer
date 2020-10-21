@@ -263,9 +263,16 @@ default_exclusions = {
     # TODO temporary ? Restore after foreach_get()
     T.FaceMap: [NameFilterOut(["index"])],
     T.Image: [
-        NameFilterOut("pixels"),
-        # meaningless to sync these, since they are handled by Image.pack() ?
-        NameFilterOut(["packed_file", "packed_files"]),
+        NameFilterOut(
+            [
+                "is_float",  # and others
+                # is packed_files[0]
+                "packed_file",
+                # send as media
+                "packed_files",
+                "pixels",
+            ]
+        ),
     ],
     # TODO see comment in specifics.py:add_element()
     T.KeyingSets: [NameFilterOut("paths")],

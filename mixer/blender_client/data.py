@@ -53,6 +53,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def send_media_creations():
+    # TODO path, buffer, what else ?
+    pass
+
+
+def build_media_creations():
+    # TODO save to resolved path.
+    # The packed data with be saved to file, not a problem
+    pass
+
+
 def send_data_creations(proxies: CreationChangeset):
     if not share_data.use_experimental_sync():
         return
@@ -69,6 +80,8 @@ def send_data_creations(proxies: CreationChangeset):
                 logger.error(line)
             continue
 
+        # TODO if the proxy has a media descriptor, send the media command before the dataclock
+        # creation so that it is available at bpy_data_ctor() time
         items: List[bytes] = []
         items.append(encode_string(encoded_proxy))
         items.extend(soa_buffers(datablock_proxy))

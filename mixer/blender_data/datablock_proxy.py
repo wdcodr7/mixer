@@ -150,7 +150,17 @@ class DatablockProxy(StructProxy):
             self._datablock_uuid = bl_instance.mixer_uuid
             context.proxy_state.proxies[uuid] = self
 
+        self.attach_media_descriptor()
         return self
+
+    def attach_media_descriptor(self):
+        # if Image, Sound, Library, MovieClip, Text, VectorFont, Volume
+        # create a self._media with the data to be sent
+        # - filepath
+        # - reference to the packed data if packed
+        #
+        #
+        pass
 
     @property
     def collection_name(self) -> Optional[str]:

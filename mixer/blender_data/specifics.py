@@ -32,6 +32,8 @@ from pathlib import Path
 import traceback
 from typing import Any, Dict, ItemsView, Optional, TYPE_CHECKING, Union
 
+from mixer.local_data import get_resolved_file_path
+
 import bpy
 import bpy.types as T  # noqa N812
 import bpy.path
@@ -110,24 +112,27 @@ def bpy_data_ctor(collection_name: str, proxy: DatablockProxy, context: Any) -> 
     """
     collection = getattr(bpy.data, collection_name)
     if collection_name == "images":
-        is_packed = proxy.data("packed_file") is not None
         image = None
+        filepath = proxy.data("filepath")
+        resolved_filepath = get_resolved_file_path(filepath)
+        is_packed = proxy.data("packed_file") is not None
         if is_packed:
+            with open(resolved_filepath, "rb") as image_file:
+                buffer = image_file.read()
             name = proxy.data("name")
             width, height = proxy.data("size")
             image = collection.new(name, width, height)
-            # remaning attributes will be saved from the received proxy attributes
+            image.pack(data=buffer, data_len=len(buffer))
         else:
-            path = proxy.data("filepath")
-            if path != "":
-                try:
-                    image = collection.load(path)
-                except RuntimeError as e:
-                    logger.warning(f'Cannot load image at path "{path}". Exception: ')
-                    logger.warning(f"... {e}")
-                    return None
-                # we may have received an ID named xxx.001 although filepath is xxx, so fix it now
-                image.name = proxy.data("name")
+            try:
+                image = collection.load(resolved_filepath)
+            except RuntimeError as e:
+                logger.warning(f'Cannot load image original "{filepath}"", resolved "{resolved_filepath}". Exception: ')
+                logger.warning(f"... {e}")
+                return None
+            # we may have received an ID named xxx.001 although filepath is xxx, so fix it now
+            # TODO check this
+            image.name = proxy.data("name")
         return image
 
     if collection_name == "objects":

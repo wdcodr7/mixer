@@ -268,8 +268,6 @@ default_exclusions = {
                 "is_float",  # and others
                 # is packed_files[0]
                 "packed_file",
-                # send as media
-                "packed_files",
                 "pixels",
             ]
         ),
@@ -384,6 +382,10 @@ default_exclusions = {
                 "vertex_groups",
             ]
         )
+    ],
+    T.PackedFile: [
+        # send by a BLENDER_DATA_MEDIA command, not serialized with proxies
+        NameFilterOut("data")
     ],
     T.RenderSettings: [
         NameFilterOut(

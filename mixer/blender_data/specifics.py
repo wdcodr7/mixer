@@ -115,16 +115,22 @@ def bpy_data_ctor(collection_name: str, proxy: DatablockProxy, context: Any) -> 
         image = None
         filepath = proxy.data("filepath")
         resolved_filepath = get_resolved_file_path(filepath)
-        is_packed = proxy.data("packed_file") is not None
-        if is_packed:
-            # not implemenetd
-            return None
-            with open(resolved_filepath, "rb") as image_file:
-                buffer = image_file.read()
+        packed_files = proxy.data("packed_files")
+        if packed_files is not None and packed_files.length:
             name = proxy.data("name")
             width, height = proxy.data("size")
-            image = collection.new(name, width, height)
-            image.pack(data=buffer, data_len=len(buffer))
+            try:
+                with open(resolved_filepath, "rb") as image_file:
+                    buffer = image_file.read()
+                image = collection.new(name, width, height)
+                image.pack(data=buffer, data_len=len(buffer))
+            except RuntimeError as e:
+                logger.warning(
+                    f'Cannot load packed image original "{filepath}"", resolved "{resolved_filepath}". Exception: '
+                )
+                logger.warning(f"... {e}")
+                return None
+
         else:
             try:
                 image = collection.load(resolved_filepath)
@@ -132,9 +138,10 @@ def bpy_data_ctor(collection_name: str, proxy: DatablockProxy, context: Any) -> 
                 logger.warning(f'Cannot load image original "{filepath}"", resolved "{resolved_filepath}". Exception: ')
                 logger.warning(f"... {e}")
                 return None
-            # we may have received an ID named xxx.001 although filepath is xxx, so fix it now
-            # TODO check this
-            image.name = proxy.data("name")
+
+        # prevent filepath to be overwritten by the incoming proxy value as it would attempt to reload the file
+        # from the incoming path that may not exist
+        proxy._data["filepath"] = resolved_filepath
         return image
 
     if collection_name == "objects":

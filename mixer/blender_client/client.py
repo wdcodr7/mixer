@@ -38,7 +38,7 @@ import os
 import struct
 import time
 import traceback
-from typing import Set, Tuple, Optional
+from typing import Dict, Tuple, Optional
 from enum import IntEnum
 
 import bpy
@@ -65,7 +65,7 @@ from mixer.draw_handlers import set_draw_handlers
 
 from mixer.blender_client.camera import send_camera
 from mixer.blender_client.light import send_light
-from mixer.local_data import get_or_create_cache_file, get_source_file_path
+from mixer.local_data import get_local_or_create_cache_file, get_source_file_path
 
 logger = logging.getLogger(__name__)
 
@@ -350,7 +350,7 @@ class BlenderClient(Client):
         size, index = common.decode_int(data, index)
         buffer = buffer = data[index : index + size]
         if not packed:
-            get_or_create_cache_file(path, buffer)
+            get_local_or_create_cache_file(path, buffer)
             buffer = None
 
         self.textures[path] = TextureData(path=path, packed=packed, data=buffer, width=width, height=height)
@@ -1062,6 +1062,9 @@ class BlenderClient(Client):
                         data_api.build_data_create(command.data)
                     elif command.type == MessageType.BLENDER_DATA_RENAME:
                         data_api.build_data_rename(command.data)
+                    elif command.type == MessageType.BLENDER_DATA_MEDIA:
+                        data_api.build_data_media(command.data)
+
                     else:
                         # Command is ignored, so no depsgraph update can be triggered
                         command_triggers_depsgraph_update = False

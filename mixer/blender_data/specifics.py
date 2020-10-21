@@ -117,6 +117,8 @@ def bpy_data_ctor(collection_name: str, proxy: DatablockProxy, context: Any) -> 
         resolved_filepath = get_resolved_file_path(filepath)
         is_packed = proxy.data("packed_file") is not None
         if is_packed:
+            # not implemenetd
+            return None
             with open(resolved_filepath, "rb") as image_file:
                 buffer = image_file.read()
             name = proxy.data("name")

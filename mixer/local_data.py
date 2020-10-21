@@ -54,7 +54,7 @@ def get_source_file_path(cache_path: str):
     return metadata_path.read_text()
 
 
-def get_or_create_cache_file(str_path: str, data: bytes):
+def get_local_or_create_cache_file(str_path: str, data: bytes):
     path = Path(str_path)
     if path.exists():
         return str_path
@@ -74,8 +74,8 @@ def get_cache_file_hash(path: Path):
 def create_cache_file(path: Path, cache_path: Path, data: bytes):
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(cache_path, "wb") as f:
-        f.write(data)
+    with open(cache_path, "wb") as data_file:
+        data_file.write(data)
 
-    with open(cache_path.with_suffix(".metadata"), "w") as f:
-        f.write(str(path))
+    with open(cache_path.with_suffix(".metadata"), "w") as metadata_file:
+        metadata_file.write(str(path))

@@ -112,7 +112,6 @@ class SendSceneContentFailed(Exception):
 
 class TextureData:
     def __init__(self, *args, **kwargs):
-        self.path = kwargs.get("path")
         self.packed = kwargs.get("packed")
         self.data = kwargs.get("data")
         self.width = kwargs.get("width")
@@ -343,17 +342,17 @@ class BlenderClient(Client):
         self.add_command(common.Command(MessageType.TRANSFORM, transform_buffer, 0))
 
     def build_texture_file(self, data):
-        path, index = common.decode_string(data, 0)
+        name_or_path, index = common.decode_string(data, 0)
         packed, index = common.decode_bool(data, index)
         width, index = common.decode_int(data, index)
         height, index = common.decode_int(data, index)
         size, index = common.decode_int(data, index)
         buffer = buffer = data[index : index + size]
         if not packed:
-            get_local_or_create_cache_file(path, buffer)
+            get_local_or_create_cache_file(name_or_path, buffer)
             buffer = None
 
-        self.textures[path] = TextureData(path=path, packed=packed, data=buffer, width=width, height=height)
+        self.textures[name_or_path] = TextureData(packed=packed, data=buffer, width=width, height=height)
 
     def send_texture_file(self, path, width, height):
         texture_data = self.textures.get(path)
@@ -371,9 +370,7 @@ class BlenderClient(Client):
 
     def send_texture_data(self, path, packed, width, height, data):
         name_buffer = common.encode_string(path)
-        self.textures[path] = TextureData(
-            path=path, packed=packed, width=width, height=height, data=data if packed else None
-        )
+        self.textures[path] = TextureData(packed=packed, width=width, height=height, data=data if packed else None)
         self.add_command(
             common.Command(
                 MessageType.TEXTURE,
@@ -398,8 +395,9 @@ class BlenderClient(Client):
                 path = bpy.path.abspath(image.filepath)
                 path = path.replace("\\", "/")
                 if pack:
-                    self.send_texture_data(path, pack is not None, image.size[0], image.size[1], pack.data)
-                    return path
+                    # if texture is packed, send its name rather than its fil path
+                    self.send_texture_data(image.name_full, True, image.size[0], image.size[1], pack.data)
+                    return image.name_full
                 else:
                     self.send_texture_file(path, image.size[0], image.size[1])
                     return get_source_file_path(path)

@@ -39,14 +39,14 @@ def get_or_create_material(material_name):
 
 
 def build_texture(principled, material, channel, is_color, data, index):
-    file_name, index = common.decode_string(data, index)
-    if len(file_name) == 0:
+    name_or_path, index = common.decode_string(data, index)
+    if len(name_or_path) == 0:
         return index
 
-    texture_data = share_data.client.textures.get(file_name)
+    texture_data = share_data.client.textures.get(name_or_path)
     if texture_data is None:
-        logger.error("%s not registered", file_name)
-        return
+        logger.error("%s not registered", name_or_path)
+        return index
 
     tex_image = None
     for link in material.node_tree.links:
@@ -63,11 +63,11 @@ def build_texture(principled, material, channel, is_color, data, index):
         if tex_image.image and tex_image.image.packed_file:
             return index
         buffer = texture_data.data
-        tex_image.image = bpy.data.images.new(file_name, width=texture_data.width, height=texture_data.height)
+        tex_image.image = bpy.data.images.new(name_or_path, width=texture_data.width, height=texture_data.height)
         tex_image.image.pack(data=buffer, data_len=len(buffer))
         tex_image.image.source = "FILE"
     else:
-        resolved_filename = get_resolved_file_path(file_name)
+        resolved_filename = get_resolved_file_path(name_or_path)
         if tex_image.image and tex_image.image.filepath == resolved_filename:
             return index
 

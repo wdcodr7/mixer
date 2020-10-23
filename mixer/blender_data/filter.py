@@ -269,6 +269,10 @@ default_exclusions = {
                 # is packed_files[0]
                 "packed_file",
                 "pixels",
+                "bindcode",
+                "has_data",
+                "depth",
+                "channels",
             ]
         ),
     ],

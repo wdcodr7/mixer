@@ -41,17 +41,18 @@ def get_data_directory():
 
 
 def get_resolved_file_path(path: str):
-    if os.path.exists(path):
+    abspath = bpy.path.abspath(path)
+    if os.path.exists(abspath):
         return path
 
     return str(get_cache_file_hash(Path(path)))
 
 
 def get_source_file_path(cache_path: str):
-    path = bpy.path.abspath(cache_path)
-    metadata_path = Path(path).with_suffix(".metadata")
+    abspath = bpy.path.abspath(cache_path)
+    metadata_path = Path(abspath).with_suffix(".metadata")
     if not metadata_path.exists():
-        return path
+        return abspath
 
     return metadata_path.read_text()
 

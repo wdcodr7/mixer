@@ -113,6 +113,7 @@ def bpy_data_ctor(collection_name: str, proxy: DatablockProxy, context: Any) -> 
     collection = getattr(bpy.data, collection_name)
     if collection_name == "images":
         image = None
+        image_name = proxy.data("name")
         filepath = proxy.data("filepath")
         resolved_filepath = get_resolved_file_path(filepath)
         packed_files = proxy.data("packed_files")
@@ -134,6 +135,7 @@ def bpy_data_ctor(collection_name: str, proxy: DatablockProxy, context: Any) -> 
         else:
             try:
                 image = collection.load(resolved_filepath)
+                image.name = image_name
             except RuntimeError as e:
                 logger.warning(f'Cannot load image original "{filepath}"", resolved "{resolved_filepath}". Exception: ')
                 logger.warning(f"... {e}")
@@ -142,6 +144,7 @@ def bpy_data_ctor(collection_name: str, proxy: DatablockProxy, context: Any) -> 
         # prevent filepath to be overwritten by the incoming proxy value as it would attempt to reload the file
         # from the incoming path that may not exist
         proxy._data["filepath"] = resolved_filepath
+        proxy._data["filepath_raw"] = resolved_filepath
         return image
 
     if collection_name == "objects":
@@ -340,19 +343,7 @@ def pre_save_struct(proxy: Proxy, bpy_struct: T.Struct, attr_name: str):
 
 def post_save_id(proxy: Proxy, bpy_id: T.ID):
     """Apply type specific patches after loading bpy_struct into proxy"""
-    if isinstance(bpy_id, T.Image):
-        # So far, the receiver has no valid "current file", so he cannot load relative files
-        for attr_name in ("filepath", "filepath_raw"):
-            path = proxy._data[attr_name]
-            if path:
-                proxy._data[attr_name] = bpy.path.abspath(path)
-
-    if isinstance(bpy_id, T.Sound):
-        # So far, the receiver has no valid "current file", so he cannot load relative files
-        attr_name = "filepath"
-        path = proxy._data[attr_name]
-        if path:
-            proxy._data[attr_name] = bpy.path.abspath(path)
+    pass
 
 
 _link_collections = tuple(type(t.bl_rna) for t in [T.CollectionObjects, T.CollectionChildren, T.SceneObjects])

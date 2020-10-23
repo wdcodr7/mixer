@@ -241,7 +241,7 @@ class DatablockProxy(StructProxy):
 
         if DEBUG:
             name = self.data("name")
-            if self.collection.get(name) != datablock:
+            if self.collection.get(name).name != datablock.name:
                 logger.error(f"Name mismatch after creation of bpy.data.{self.collection_name}[{name}] ")
 
         datablock.mixer_uuid = self.mixer_uuid()

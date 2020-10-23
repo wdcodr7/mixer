@@ -170,7 +170,7 @@ class DatablockProxy(StructProxy):
             if packed_file is not None:
                 data = packed_file.data
             else:
-                with open(path, "rb") as data_file:
+                with open(bpy.path.abspath(path), "rb") as data_file:
                     data = data_file.read()
             self._media = (path, data)
 

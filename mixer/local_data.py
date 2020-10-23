@@ -52,7 +52,7 @@ def get_source_file_path(cache_path: str):
     abspath = bpy.path.abspath(cache_path)
     metadata_path = Path(abspath).with_suffix(".metadata")
     if not metadata_path.exists():
-        return abspath
+        return cache_path
 
     return metadata_path.read_text()
 

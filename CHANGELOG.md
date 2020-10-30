@@ -1,13 +1,19 @@
-# WIP
+# 0.18.0 wip
 
 ## Features
 
 - Shading trees for objects, worlds and lights (except grouped nodes)
+- Log OS, Blender, Mixer version and enabled addons list when joining room
+- VRtist: sky
 
 ## Fixes
 
 - Transfer less mesh data when modifiers are modified
-- Trasnfer less mesh data with linked meshes
+- Transfer less mesh data with linked meshes
+- Fix new mesh part not linked to its collection after mesh separate
+- Remove logging of meaningless ReferenceError messages
+- Fix error when setting datablock reference after initial synchronization (e.g. TextureNodeImage.image, ArrayModifier.object_offset, Scene.camera)
+- Add exception type when logging an exception
 
 
 # 0.17.0 (2020-10-15)

@@ -31,6 +31,8 @@ from mixer.blender_data.proxy import Delta, DeltaAddition, DeltaDeletion, DeltaU
 from mixer.blender_data.datablock_collection_proxy import DatablockCollectionProxy, DatablockRefCollectionProxy
 from mixer.blender_data.datablock_proxy import DatablockProxy
 from mixer.blender_data.datablock_ref_proxy import DatablockRefProxy
+from mixer.blender_data.misc_proxies import NonePtrProxy
+from mixer.blender_data.mesh_proxy import MeshProxy
 from mixer.blender_data.node_proxy import NodeLinksProxy
 from mixer.blender_data.struct_proxy import StructProxy
 from mixer.blender_data.struct_collection_proxy import StructCollectionProxy
@@ -43,6 +45,8 @@ logger = logging.getLogger(__name__)
 struct_like_classes = [
     DatablockProxy,
     DatablockRefProxy,
+    MeshProxy,
+    NonePtrProxy,
     StructProxy,
     SoaElement,
 ]
@@ -89,7 +93,7 @@ def default(obj):
         d = {MIXER_CLASS: class_.__name__}
         if issubclass(class_, Delta):
             d.update({"value": obj.value})
-        elif issubclass(class_, SoaElement):
+        elif issubclass(class_, (NonePtrProxy, SoaElement)):
             pass
         else:
             d.update({"_data": obj._data})
@@ -120,7 +124,7 @@ def decode_hook(x):
     obj = class_()
     if class_ in delta_classes:
         obj.value = x["value"]
-    elif class_ is SoaElement:
+    elif class_ in (SoaElement, NonePtrProxy):
         pass
     else:
         obj._data.update(x["_data"])

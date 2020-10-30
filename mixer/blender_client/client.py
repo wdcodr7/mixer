@@ -1075,7 +1075,7 @@ class BlenderClient(Client):
                     for line in traceback.format_exc().splitlines():
                         logger.warning(line)
 
-                    if get_mixer_prefs().env == "development" or isinstance(e, SendSceneContentFailed):
+                    if isinstance(e, SendSceneContentFailed):
                         raise
 
                 finally:

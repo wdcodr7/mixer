@@ -261,6 +261,7 @@ default_exclusions = {
     # TODO this avoids the recursion path Node.socket , NodeSocker.Node
     # can probably be included in the readonly filter
     # TODO temporary ? Restore after foreach_get()
+    T.DecimateModifier: [NameFilterOut(["face_count"])],
     T.FaceMap: [NameFilterOut(["index"])],
     T.Image: [
         NameFilterOut(
@@ -373,6 +374,7 @@ default_exclusions = {
                 # bounding box, will be computed
                 "dimensions",
                 "bound_box",
+                "mode",
                 # TODO triggers an error on metaballs
                 #   Cannot write to '<bpy_collection[0], Object.material_slots>', attribute '' because it does not exist
                 #   looks like a bpy_prop_collection and the key is and empty string
@@ -393,8 +395,12 @@ default_exclusions = {
     ],
     T.RenderSettings: [
         NameFilterOut(
-            # just a view of "right" and "left" from RenderSettings.views
-            "stereo_views"
+            [
+                # just a view of "right" and "left" from RenderSettings.views
+                "stereo_views",
+                # Causes error in pass_filter, maybe not useful
+                "bake",
+            ]
         )
     ],
     T.Scene: [
@@ -409,6 +415,8 @@ default_exclusions = {
                 # Not required and messy: plenty of uninitialized enums, several settings, like "scuplt" are None and
                 # it is unclear how to do it.
                 "tool_settings",
+                # Probably per user setting. Causes a readonly error for StudioLight.spherical_harmonics_coefficients
+                "display",
                 # TODO temporary, not implemented
                 "node_tree",
                 "view_layers",

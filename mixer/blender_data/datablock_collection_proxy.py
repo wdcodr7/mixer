@@ -24,7 +24,7 @@ from __future__ import annotations
 import functools
 import logging
 import traceback
-from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING, Union
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 
 import bpy
 import bpy.types as T  # noqa
@@ -55,12 +55,17 @@ class DatablockCollectionProxy(Proxy):
     of DatablockProxy.
     """
 
-    def __init__(self):
+    def __init__(self, name: str):
+        self._name: str = name
         # On item per datablock. The key is the uuid, which eases rename management
         self._data: Dict[str, DatablockProxy] = {}
 
     def __len__(self):
         return len(self._data)
+
+    def reload_datablocks(self, datablocks: Dict[str, T.ID]):
+        collection = getattr(bpy.data, self._name)
+        datablocks.update({datablock.mixer_uuid: datablock for datablock in collection})
 
     def load(self, bl_collection: bpy.types.bpy_prop_collection, key: str, context: Context):  # noqa N802
         """
@@ -182,7 +187,7 @@ class DatablockCollectionProxy(Proxy):
             # but deleting the light on this side has already deleted the object.
             # Alternatively we could try to sort messages on the sender side
             logger.warning(f"Exception during remove_datablock for {proxy}")
-            logger.warning(f"... {e}")
+            logger.warning(f"... {e!r}")
         uuid = proxy.mixer_uuid()
         del self._data[uuid]
 
@@ -213,14 +218,14 @@ class DatablockCollectionProxy(Proxy):
                     continue
                 uuid = ensure_uuid(id_)
                 context.proxy_state.datablocks[uuid] = id_
-                proxy = DatablockProxy().load(id_, name, context, bpy_data_collection_name=collection_name)
+                proxy = DatablockProxy.make(id_).load(id_, name, context, bpy_data_collection_name=collection_name)
                 context.proxy_state.proxies[uuid] = proxy
                 self._data[uuid] = proxy
                 changeset.creations.append(proxy)
             except MaxDepthExceeded as e:
                 logger.error(f"MaxDepthExceeded while loading {collection_name}[{name}]:")
                 logger.error("... Nested attribute depth is too large: ")
-                logger.error(f"... {e}")
+                logger.error(f"... {e!r}")
             except Exception:
                 logger.error(f"Exception while loading {collection_name}[{name}]:")
                 for line in traceback.format_exc().splitlines():
@@ -230,7 +235,7 @@ class DatablockCollectionProxy(Proxy):
             try:
                 logger.info("Perform removal for %s", proxy)
                 uuid = proxy.mixer_uuid()
-                changeset.removals.append((uuid, str(proxy)))
+                changeset.removals.append((uuid, proxy.collection_name, str(proxy)))
                 del self._data[uuid]
                 id_ = context.proxy_state.datablocks[uuid]
                 del context.proxy_state.proxies[uuid]
@@ -271,7 +276,7 @@ class DatablockCollectionProxy(Proxy):
 
         return changeset
 
-    def search(self, name: str) -> [DatablockProxy]:
+    def search(self, name: str) -> List[DatablockProxy]:
         """Convenience method to find proxies by name instead of uuid (for tests only)"""
         results = []
         for uuid in self._data.keys():
@@ -321,6 +326,8 @@ class DatablockRefCollectionProxy(Proxy):
                 uuid = item.mixer_uuid
                 proxy.load(item, item.name, context)
                 self._data[uuid] = proxy
+            else:
+                logger.error(f"unexpected None in {bl_collection}.{key}")
         return self
 
     def save(self, parent: Any, key: str, context: Context):
@@ -376,20 +383,21 @@ class DatablockRefCollectionProxy(Proxy):
 
                 assert isinstance(ref_update, DatablockRefProxy)
                 if to_blender:
-                    # TODO another case for rename trouble ik k remains the name
-                    # should be fixed automatically if the key is the uuid at
-                    # DatablockCollectionProxy load
                     uuid = ref_update._datablock_uuid
                     datablock = context.proxy_state.datablocks.get(uuid)
-                    if datablock is None:
-                        logger.warning(
-                            f"delta apply for {parent}[{key}]: unregistered uuid {uuid} for {ref_update._debug_name}"
-                        )
-                        continue
                     if isinstance(ref_delta, DeltaAddition):
-                        collection.link(datablock)
+                        if datablock is not None:
+                            collection.link(datablock)
+                        else:
+                            logger.warning(
+                                f"delta apply add for {parent}[{key}]: unregistered uuid {uuid} for {ref_update._debug_name}"
+                            )
+
                     else:
-                        collection.unlink(datablock)
+                        if datablock is not None:
+                            collection.unlink(datablock)
+                        # else
+                        #   we have already processed an Objet removal. Not an error
 
                 if isinstance(ref_delta, DeltaAddition):
                     self._data[k] = ref_update
@@ -398,7 +406,7 @@ class DatablockRefCollectionProxy(Proxy):
             except Exception as e:
                 logger.warning(f"DatablockCollectionProxy.apply(). Processing {ref_delta} to_blender {to_blender}")
                 logger.warning(f"... for {collection}[{k}]")
-                logger.warning(f"... Exception: {e}")
+                logger.warning(f"... Exception: {e!r}")
                 logger.warning("... Update ignored")
                 continue
 

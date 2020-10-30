@@ -42,9 +42,10 @@ import mathutils
 
 if TYPE_CHECKING:
     from mixer.blender_data.aos_proxy import AosProxy
-    from mixer.blender_data.proxy import Context, Proxy
-    from mixer.blender_data.bpy_data_proxy import VisitState
     from mixer.blender_data.datablock_proxy import DatablockProxy
+    from mixer.blender_data.mesh_proxy import MeshProxy
+    from mixer.blender_data.proxy import Context, Proxy
+    from mixer.blender_data.struct_proxy import StructProxy
     from mixer.blender_data.struct_collection_proxy import StructCollectionProxy
 
 logger = logging.getLogger(__name__)
@@ -59,14 +60,47 @@ soable_collection_properties = {
     T.Mesh.bl_rna.properties["face_maps"],
     T.Mesh.bl_rna.properties["loops"],
     T.Mesh.bl_rna.properties["loop_triangles"],
-    # messy: :MeshPolygon.vertices has variable length, not 3 as stated in the doc, so ignore
     T.Mesh.bl_rna.properties["polygons"],
-    T.Mesh.bl_rna.properties["polygon_layers_float"],
-    T.Mesh.bl_rna.properties["polygon_layers_int"],
     T.Mesh.bl_rna.properties["vertices"],
-    T.MeshUVLoopLayer.bl_rna.properties["data"],
+    T.MeshFaceMapLayer.bl_rna.properties["data"],
     T.MeshLoopColorLayer.bl_rna.properties["data"],
+    T.MeshUVLoopLayer.bl_rna.properties["data"],
 }
+
+
+_resize_geometry_types = tuple(
+    type(t.bl_rna)
+    for t in [
+        T.MeshEdges,
+        T.MeshLoops,
+        T.MeshLoopTriangles,
+        T.MeshPolygons,
+        T.MeshVertices,
+    ]
+)
+
+
+_mesh_geometry_properties = {
+    "edges",
+    "loop_triangles",
+    "loops",
+    "polygons",
+    "vertices",
+}
+"""If the size of any of these has changes clear_geomtry() is required. Is is not necessary to check for
+other properties (uv_layers), as they are redundant checks"""
+
+mesh_resend_on_clear = {
+    "edges",
+    "face_maps",
+    "loops",
+    "loop_triangles",
+    "polygons",
+    "vertices",
+    "uv_layers",
+    "vertex_colors",
+}
+"""if geometry needs to be cleared, these arrays must be resend, as they will need to be reloaded by the receiver"""
 
 # in sync with soa_initializers
 soable_properties = (
@@ -148,20 +182,22 @@ def bpy_data_ctor(collection_name: str, proxy: DatablockProxy, context: Any) -> 
         return image
 
     if collection_name == "objects":
+        from mixer.blender_data.datablock_ref_proxy import DatablockRefProxy
+        from mixer.blender_data.misc_proxies import NonePtrProxy
+
         name = proxy.data("name")
         target = None
         target_proxy = proxy.data("data")
-        if target_proxy is not None:
-            # use class name to work around circular references with proxy.py
-            target_proxy_class = target_proxy.__class__.__name__
-            if target_proxy_class != "DatablockRefProxy":
-                # error on the sender side
-                logger.warning(
-                    f"bpy.data.objects[{name}].data proxy is a {target_proxy_class}. Expected a DatablockRefProxy"
-                )
-                logger.warning("... loaded as Empty")
-            else:
-                target = target_proxy.target(context)
+        if isinstance(target_proxy, DatablockRefProxy):
+            target = target_proxy.target(context)
+        elif isinstance(target_proxy, NonePtrProxy):
+            target = None
+        else:
+            # error on the sender side
+            logger.warning(f"bpy.data.objects[{name}].data proxy is a {target_proxy.__class__}.")
+            logger.warning("... loaded as Empty")
+            target = None
+
         object_ = collection.new(name, target)
         return object_
 
@@ -190,7 +226,7 @@ def bpy_data_ctor(collection_name: str, proxy: DatablockProxy, context: Any) -> 
         id_ = collection.new(name)
     except TypeError as e:
         logger.error(f"Exception while calling : bpy.data.{collection_name}.new({name})")
-        logger.error(f"TypeError : {e}")
+        logger.error(f"TypeError : {e!r}")
         return None
 
     return id_
@@ -284,9 +320,48 @@ def conditional_properties(bpy_struct: T.Struct, properties: ItemsView) -> Items
     return properties
 
 
-def pre_save_id(proxy: DatablockProxy, target: T.ID, context: Context) -> T.ID:
+def proxy_requires_clear_geometry(incoming_proxy: MeshProxy, mesh: T.Mesh) -> bool:
+    for k in _mesh_geometry_properties:
+        soa = getattr(mesh, k)
+        existing_length = len(soa)
+        incoming_soa = incoming_proxy.data(k)
+        if incoming_soa:
+            incoming_length = incoming_soa.length
+            if existing_length != incoming_length:
+                logger.debug(
+                    "need_clear_geometry: %s.%s (current/incoming) (%s/%s)",
+                    mesh,
+                    k,
+                    existing_length,
+                    incoming_length,
+                )
+                return True
+    return False
+
+
+def update_requires_clear_geometry(incoming_update: MeshProxy, existing_proxy: MeshProxy) -> bool:
+    geometry_updates = _mesh_geometry_properties & set(incoming_update._data.keys())
+    for k in geometry_updates:
+        existing_length = existing_proxy._data[k].length
+        incoming_soa = incoming_update.data(k)
+        if incoming_soa:
+            incoming_length = incoming_soa.length
+            if existing_length != incoming_length:
+                logger.debug("apply: length mismatch %s.%s ", existing_proxy, k)
+                return True
+    return False
+
+
+def pre_save_datablock(proxy: DatablockProxy, target: T.ID, context: Context) -> T.ID:
     """Process attributes that must be saved first and return a possibly updated reference to the target"""
-    if isinstance(target, bpy.types.Material):
+
+    # WARNING this is called from save() and from apply()
+    # When called from save, the proxy has  all the synchronized properties
+    # WHen called from apply, the proxy only contains the updated properties
+
+    if isinstance(target, T.Mesh) and proxy_requires_clear_geometry(proxy, target):
+        target.clear_geometry()
+    elif isinstance(target, T.Material):
         use_nodes = proxy.data("use_nodes")
         if use_nodes:
             target.use_nodes = True
@@ -294,21 +369,26 @@ def pre_save_id(proxy: DatablockProxy, target: T.ID, context: Context) -> T.ID:
         is_grease_pencil = proxy.data("is_grease_pencil")
         # will be None for a DeltaUpdate that does not modify "is_grease_pencil"
         if is_grease_pencil is not None:
-            # is_grease_pencil is modified
-            if is_grease_pencil:
-                if not target.grease_pencil:
-                    bpy.data.materials.create_gpencil_data(target)
-            else:
-                if target.grease_pencil:
-                    bpy.data.materials.remove_gpencil_data(target)
+            # Seems to be write once as no depsgraph update is fired
+            if is_grease_pencil and not target.grease_pencil:
+                bpy.data.materials.create_gpencil_data(target)
+            elif not is_grease_pencil and target.grease_pencil:
+                bpy.data.materials.remove_gpencil_data(target)
     elif isinstance(target, T.Scene):
+        from mixer.blender_data.misc_proxies import NonePtrProxy
+
         # Set 'use_node' to True first is the only way I know to be able to set the 'node_tree' attribute
         use_nodes = proxy.data("use_nodes")
         if use_nodes:
             target.use_nodes = True
+
         sequence_editor = proxy.data("sequence_editor")
-        if sequence_editor is not None and target.sequence_editor is None:
-            target.sequence_editor_create()
+        if sequence_editor is not None:
+            # NonePtrProxy or StructProxy
+            if not isinstance(sequence_editor, NonePtrProxy) and target.sequence_editor is None:
+                target.sequence_editor_create()
+            elif isinstance(sequence_editor, NonePtrProxy) and target.sequence_editor is not None:
+                target.sequence_editor_clear()
     elif isinstance(target, T.Light):
         # required first to have access to new light type attributes
         light_type = proxy.data("type")
@@ -316,29 +396,21 @@ def pre_save_id(proxy: DatablockProxy, target: T.ID, context: Context) -> T.ID:
             target.type = light_type
             # must reload the reference
             target = proxy.target(context)
-    elif isinstance(target, T.ColorManagedViewSettings):
-        use_curve_mapping = proxy.data("use_curve_mapping")
-        if use_curve_mapping:
-            target.use_curve_mapping = True
-    elif isinstance(target, bpy.types.World):
+    elif isinstance(target, T.World):
         use_nodes = proxy.data("use_nodes")
         if use_nodes:
             target.use_nodes = True
-    elif isinstance(target, T.Mesh):
-        context.visit_state.funcs["Mesh.clear_geometry"] = target.clear_geometry
 
     return target
 
 
-def pre_save_struct(proxy: Proxy, bpy_struct: T.Struct, attr_name: str):
+def pre_save_struct(proxy: StructProxy, target: T.bpy_struct, context: Context) -> T.bpy_struct:
     """Process attributes that must be saved first"""
-    target = getattr(bpy_struct, attr_name, None)
-    if target is None:
-        return None
     if isinstance(target, T.ColorManagedViewSettings):
         use_curve_mapping = proxy.data("use_curve_mapping")
         if use_curve_mapping:
             target.use_curve_mapping = True
+    return target
 
 
 def post_save_id(proxy: Proxy, bpy_id: T.ID):
@@ -495,31 +567,9 @@ def add_element(proxy: Proxy, collection: T.bpy_prop_collection, key: str, conte
 always_clear = [type(T.ObjectModifiers.bl_rna), type(T.ObjectGpencilModifiers.bl_rna), type(T.SequenceModifiers.bl_rna)]
 """Collections in this list are order dependent and should always be cleared"""
 
-_resize_geometry_types = tuple(type(t.bl_rna) for t in [T.MeshEdges, T.MeshLoops, T.MeshVertices, T.MeshPolygons])
-
-
-def resize_geometry(mesh_geometry_item: T.Property, proxy: AosProxy, visit_state: VisitState):
-    """
-    Args:
-        mesh_geometry_item : Mesh.vertices, Mesh.loops, ...
-        proxy : proxy to mesh_geometry_item
-    """
-    existing_length = len(mesh_geometry_item)
-    incoming_length = proxy.length
-    if existing_length != incoming_length:
-        if existing_length != 0:
-            logger.debug(f"resize_geometry(): calling clear() for {mesh_geometry_item}")
-            visit_state.funcs["Mesh.clear_geometry"]()
-            # We should need it only once for a whole Mesh
-            del visit_state.funcs["Mesh.clear_geometry"]
-        logger.debug(f"resize_geometry(): add({incoming_length}) for {mesh_geometry_item}")
-        mesh_geometry_item.add(incoming_length)
-
 
 def truncate_collection(target: T.bpy_prop_collection, proxy: Union[StructCollectionProxy, AosProxy], context: Context):
-    """
-    TODO check if this is obsolete since Delta updates
-    """
+    """"""
     if not hasattr(target, "bl_rna"):
         return
 
@@ -529,7 +579,15 @@ def truncate_collection(target: T.bpy_prop_collection, proxy: Union[StructCollec
         return
 
     if isinstance(target_rna, _resize_geometry_types):
-        resize_geometry(target, proxy, context.visit_state)
+        existing_length = len(target)
+        incoming_length = proxy.length
+        if existing_length != incoming_length:
+            if existing_length != 0:
+                logger.error(f"resize_geometry(): size mismatch for {target}")
+                logger.error(f"... existing: {existing_length} incoming {incoming_length}")
+                return
+            logger.debug(f"resizing geometry: add({incoming_length}) for {target}")
+            target.add(incoming_length)
         return
 
     if isinstance(target_rna, type(T.GPencilStrokePoints.bl_rna)):

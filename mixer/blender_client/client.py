@@ -471,6 +471,23 @@ class BlenderClient(Client):
         ob.keyframe_delete(channel, index=channel_index, frame=frame)
         return name
 
+    def build_add_animation(self, data):
+        index = 0
+        name, index = common.decode_string(data, index)
+        if name not in share_data.blender_objects:
+            return name
+        ob = share_data.blender_objects[name]
+        channel, index = common.decode_string(data, index)
+        channel_index, index = common.decode_int(data, index)
+        if not hasattr(ob, channel):
+            ob = ob.data
+        frames, index = common.decode_int_array(data, index)
+        values, index = common.decode_float_array(data, index)
+        interpolations, index = common.decode_int_array(data, index)
+
+        for i in range(len(frames)):
+            self.insert_key(ob, channel, channel_index, frames[i], values[i], interpolations[i])
+
     def build_move_keyframe(self, data):
         index = 0
         name, index = common.decode_string(data, index)
@@ -644,6 +661,30 @@ class BlenderClient(Client):
             keyframe.interpolation = "LINEAR"
         if interpolation == InterpolationTypes.BEZIER:
             keyframe.interpolation = "BEZIER"
+
+    def send_object_animations(self, obj):
+        self.send_animation_buffer(obj.name_full, obj.animation_data, "location", 0)
+        self.send_animation_buffer(obj.name_full, obj.animation_data, "location", 1)
+        self.send_animation_buffer(obj.name_full, obj.animation_data, "location", 2)
+        self.send_animation_buffer(obj.name_full, obj.animation_data, "rotation_euler", 0)
+        self.send_animation_buffer(obj.name_full, obj.animation_data, "rotation_euler", 1)
+        self.send_animation_buffer(obj.name_full, obj.animation_data, "rotation_euler", 2)
+        self.send_animation_buffer(obj.name_full, obj.animation_data, "scale", 0)
+        self.send_animation_buffer(obj.name_full, obj.animation_data, "scale", 1)
+        self.send_animation_buffer(obj.name_full, obj.animation_data, "scale", 2)
+
+        if isinstance(obj.data, bpy.types.Camera):
+            self.send_animation_buffer(obj.name_full, obj.data.animation_data, "lens")
+
+        if isinstance(obj.data, bpy.types.Light):
+            self.send_animation_buffer(obj.name_full, obj.data.animation_data, "energy")
+            self.send_animation_buffer(obj.name_full, obj.data.animation_data, "color", 0)
+            self.send_animation_buffer(obj.name_full, obj.data.animation_data, "color", 1)
+            self.send_animation_buffer(obj.name_full, obj.data.animation_data, "color", 2)
+
+    def send_animations(self):
+        for obj in bpy.data.objects:
+            self.send_object_animations(obj)
 
     def send_animation_buffer(self, obj_name, animation_data, channel_name, channel_index=-1):
         if not animation_data:
@@ -1042,6 +1083,8 @@ class BlenderClient(Client):
                         self.build_remove_keyframe(command.data)
                     elif command.type == MessageType.MOVE_KEYFRAME:
                         self.build_move_keyframe(command.data)
+                    elif command.type == MessageType.ANIMATION:
+                        self.build_add_animation(command.data)
                     elif command.type == MessageType.QUERY_ANIMATION_DATA:
                         self.build_query_animation_data(command.data)
 
@@ -1233,6 +1276,8 @@ def send_scene_content():
             for material in bpy.data.materials:
                 share_data.client.send_material(material)
             send_scene_data_to_server(None, None)
+            # Temporary send initial animations
+            share_data.client.send_animations()
 
         elapse = time.monotonic() - timer
         logger.warning(f"Scene data send in {elapse:.1f} seconds")

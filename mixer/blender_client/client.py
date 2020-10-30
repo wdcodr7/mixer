@@ -485,6 +485,19 @@ class BlenderClient(Client):
         values, index = common.decode_float_array(data, index)
         interpolations, index = common.decode_int_array(data, index)
 
+        animation_data = ob.animation_data
+        if animation_data:            
+            curves = animation_data.action.fcurves
+            for curve in curves:
+                if curve.data_path == channel and (channel_index == -1 or curve.array_index == channel_index):
+                    remove_frames = []
+                    keyframes = curve.keyframe_points
+                    for i in range(len(keyframes)):
+                        remove_frames.append(keyframes[i].co[0])
+                    for frame in remove_frames:
+                        ob.keyframe_delete(channel, index=channel_index, frame=frame)
+                    curve.update()
+
         for i in range(len(frames)):
             self.insert_key(ob, channel, channel_index, frames[i], values[i], interpolations[i])
 

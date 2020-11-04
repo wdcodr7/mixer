@@ -453,6 +453,8 @@ class BlenderClient(Client):
         value, index = common.decode_float(data, index)
         interpolation, index = common.decode_int(data, index)
 
+        if channel == "rotation_euler":
+            ob.rotation_mode = "ZXY"
         self.insert_key(ob, channel, channel_index, frame, value, interpolation)
 
         return name

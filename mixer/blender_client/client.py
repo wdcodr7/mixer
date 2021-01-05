@@ -1261,6 +1261,7 @@ def clear_scene_content():
             "curves",
             "grease_pencils",
             "images",
+            "lattices",
             "lights",
             "objects",
             "materials",

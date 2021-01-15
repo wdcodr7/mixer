@@ -286,6 +286,7 @@ default_exclusions: FilterSet = {
     # TODO temporary ?
     T.Collection: [NameFilterOut(["all_objects"])],
     T.CompositorNodeRLayers: [NameFilterOut(["scene"])],
+    T.Curve: [NameFilterOut(["shape_keys"])],
     T.CurveMapPoint: [NameFilterOut(["select"])],
     # TODO this avoids the recursion path Node.socket , NodeSocker.Node
     # can probably be included in the readonly filter
@@ -347,6 +348,15 @@ default_exclusions: FilterSet = {
                 "is_visible",
                 # A reference to the wrapped Collection
                 "collection",
+            ]
+        )
+    ],
+    T.Library: [
+        NameFilterOut(
+            [
+                "parent",
+                "version",
+                # "users_id",
             ]
         )
     ],
@@ -567,6 +577,7 @@ safe_depsgraph_updates = (
     T.GreasePencil,
     T.Key,
     T.Lattice,
+    T.Library,
     T.Light,
     T.Material,
     T.Mesh,
@@ -592,6 +603,7 @@ safe_blenddata_collections = [
     "grease_pencils",
     "images",
     "lattices",
+    "libraries",
     "lights",
     "materials",
     "meshes",

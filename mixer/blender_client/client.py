@@ -605,12 +605,6 @@ class BlenderClient(Client):
         self.add_command(common.Command(MessageType.MESH, binary_buffer, 0))
 
     def build_mesh(self, command_data):
-        if not share_data.use_vrtist_protocol():
-            return self.build_mesh_generic(command_data)
-        else:
-            return self.build_mesh_vrtist(command_data)
-
-    def build_mesh_vrtist(self, command_data):
         index = 0
 
         path, index = common.decode_string(command_data, index)
@@ -638,24 +632,6 @@ class BlenderClient(Client):
             material_name, index = common.decode_string(command_data, index)
             if slot.link == "OBJECT" and material_name != "":
                 slot.material = material_api.get_or_create_material(material_name)
-
-    def build_mesh_generic(self, command_data):
-        index = 0
-
-        uuid, index = common.decode_string(command_data, index)
-        mesh_name, index = common.decode_string(command_data, index)
-        logger.info("build_mesh_generic %s", mesh_name)
-
-        meshes_proxy = share_data.bpy_data_proxy.data("meshes")
-        mesh_proxy = meshes_proxy.data(uuid)
-        if mesh_proxy is None:
-            # should not happen because a minimal generic Mesh BLENDER_DATA_CREATE is send before sending MESH
-            logger.warning(f"build_mesh for unregistered datablock {mesh_name} {uuid}. Ignored")
-            return
-        else:
-            mesh = share_data.bpy_data_proxy.context().proxy_state.datablocks[uuid]
-
-        index = mesh_api.decode_mesh_generic(self, mesh, command_data, index)
 
     def send_set_current_scene(self, name):
         buffer = common.encode_string(name)
@@ -968,6 +944,7 @@ class BlenderClient(Client):
                     elapse = time.monotonic() - groups.pop()
                     group_id = len(groups)
                     logger.warning(f"Command group {group_id} processed in {elapse:.1f} seconds")
+                    share_data.receive_sanity_check()
                     continue
 
                 if self.has_default_handler(command.type):
@@ -1278,6 +1255,7 @@ def clear_scene_content():
                 collection.remove(datablock)
 
         bpy.data.batch_remove(bpy.data.shape_keys.values())
+        bpy.data.batch_remove(bpy.data.libraries.values())
 
         # Cannot remove the last scene at this point, treat it differently
         for scene in bpy.data.scenes[:-1]:
@@ -1312,12 +1290,12 @@ def send_scene_content():
 
         share_data.clear_before_state()
         share_data.client.send_group_begin()
-        share_data.client.send_set_current_scene(bpy.context.scene.name_full)
 
         timer = time.monotonic()
         if not share_data.use_vrtist_protocol():
             generic.send_scene_data_to_server(None, None)
         else:
+            share_data.client.send_set_current_scene(bpy.context.scene.name_full)
             # Temporary waiting for material sync. Should move to send_scene_data_to_server
             for material in bpy.data.materials:
                 share_data.client.send_material(material)

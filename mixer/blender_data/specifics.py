@@ -513,15 +513,15 @@ def _add_element_default(collection: T.bpy_prop_collection, proxy: Proxy, index:
     try:
         return collection.add()
     except Exception as e:
-        logger.warning(f"add_element (default) exception for {collection} ...")
-        logger.warning(f"... {e!r}")
+        logger.info(f"add_element (default) exception for {collection} ...")
+        logger.info(f"... {e!r}")
 
     # try our best
     new_or_add = getattr(collection, "new", None)
     if new_or_add is None:
         new_or_add = getattr(collection, "add", None)
     if new_or_add is None:
-        logger.warning(f"Not implemented: add_element for {collection} ...")
+        logger.error(f"Not implemented: add_element for {collection} ...")
         return None
 
     try:
@@ -531,9 +531,9 @@ def _add_element_default(collection: T.bpy_prop_collection, proxy: Proxy, index:
             key = proxy.data("name")
             return new_or_add(key)
         except Exception:
-            logger.warning(f"Not implemented: add_element for type {type(collection)} for {collection}[{key}] ...")
+            logger.error(f"Not implemented: add_element for type {type(collection)} for {collection}[{key}] ...")
             for s in traceback.format_exc().splitlines():
-                logger.warning(f"...{s}")
+                logger.error(f"...{s}")
     return None
 
 
@@ -638,6 +638,7 @@ def _add_element_keyingset(collection: T.bpy_prop_collection, proxy: Proxy, inde
 
 
 @add_element.register(T.ActionFCurves)
+@add_element.register(T.AnimDataDrivers)
 def _add_element_action_curve(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
     data_path = proxy.data("data_path")
     array_index = proxy.data("array_index")

@@ -40,7 +40,6 @@ import time
 import traceback
 from typing import Dict, Tuple, Optional
 from enum import IntEnum
-from pathlib import Path
 
 import bpy
 from mathutils import Matrix, Quaternion

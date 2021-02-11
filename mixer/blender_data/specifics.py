@@ -319,6 +319,14 @@ def _(collection_name: str, proxy: DatablockProxy, context: Context) -> Optional
     return collection.new(name, type_)
 
 
+@bpy_data_ctor.register("textures")
+def _(collection_name: str, proxy: DatablockProxy, context: Context) -> Optional[T.ID]:
+    collection = getattr(bpy.data, collection_name)
+    name = proxy.data("name")
+    type_ = proxy.data("type")
+    return collection.new(name, type_)
+
+
 _curve_ids = {
     "Curve": "CURVE",
     "SurfaceCurve": "SURFACE",

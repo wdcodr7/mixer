@@ -311,7 +311,7 @@ def _(collection_name: str, proxy: DatablockProxy, context: Context) -> Optional
 
 
 @bpy_data_ctor.register("lights")
-@bpy_data_ctor.register("textures") # type: ignore[no-redef]
+@bpy_data_ctor.register("textures")  # type: ignore[no-redef]
 def _(collection_name: str, proxy: DatablockProxy, context: Context) -> Optional[T.ID]:
     collection = getattr(bpy.data, collection_name)
     name = proxy.data("name")
@@ -457,7 +457,9 @@ def create_clear_animation_data(target: T.bpy_struct, proxy: Union[StructProxy, 
 def pre_save_struct(proxy: StructProxy, target: T.bpy_struct):
     create_clear_animation_data(target, proxy)
 
+
 _morphable_types = (T.Light, T.Texture)
+
 
 def pre_save_datablock(proxy: DatablockProxy, target: T.ID, context: Context) -> T.ID:
     """Process attributes that must be saved first and return a possibly updated reference to the target"""

@@ -37,16 +37,30 @@ DEBUG = True
 logger = logging.getLogger(__name__)
 
 
+def _skip_scene(item):
+    return item.name == "_mixer_to_be_removed_"
+
+
+def _skip_image(item):
+    return item.source == "VIEWER"
+
+
+def _skip_skape_key(item):
+    # shape keys are not linkable, they can only be linked indirectly via a Mesh or other
+    return item.library is not None
+
+
+_skip = {"scenes": _skip_scene, "images": _skip_image, "shape_keys": _skip_skape_key}
+
+
 def skip_bpy_data_item(collection_name, item):
     # Never want to consider these as updated, created, removed, ...
-    if collection_name == "scenes":
-        if item.name == "_mixer_to_be_removed_":
-            return True
-    elif collection_name == "images":
-        if item.source == "VIEWER":
-            # "Render Result", "Viewer Node"
-            return True
-    return False
+    try:
+        skip = _skip[collection_name]
+    except KeyError:
+        return False
+    else:
+        return skip(item)
 
 
 class Filter:
@@ -298,9 +312,7 @@ default_exclusions: FilterSet = {
         )
     ],
     T.BlendData: [NameFilterOut(blenddata_exclude), TypeFilterIn(T.CollectionProperty)],  # selected collections
-    # makes a loop
     T.Bone: [NameFilterOut(["parent"])],
-    # TODO temporary ?
     T.Collection: [NameFilterOut(["all_objects"])],
     T.CompositorNodeRLayers: [NameFilterOut(["scene"])],
     T.Curve: [NameFilterOut(["shape_keys"])],
@@ -474,6 +486,15 @@ default_exclusions: FilterSet = {
                 "field",
                 # TODO
                 "particle_systems",
+                # unsupported
+                "motion_path",
+                "pose",
+                "proxy_collection",
+                "proxy",
+                "soft_body",
+                "rigid_body",
+                "rigid_body_constraint",
+                "image_user",
             ]
         )
     ],
@@ -607,6 +628,8 @@ safe_depsgraph_updates = (
     T.Camera,
     T.Collection,
     T.Curve,
+    # no updates, builtin font only
+    # T.VectorFont,
     T.Image,
     T.GreasePencil,
     T.Key,
@@ -615,6 +638,7 @@ safe_depsgraph_updates = (
     T.Material,
     T.Mesh,
     T.MetaBall,
+    T.MovieClip,
     T.NodeTree,
     T.Object,
     T.Scene,
@@ -634,6 +658,7 @@ safe_blenddata_collections = [
     "cameras",
     "collections",
     "curves",
+    "fonts",
     "grease_pencils",
     "images",
     "libraries",
@@ -641,6 +666,7 @@ safe_blenddata_collections = [
     "materials",
     "meshes",
     "metaballs",
+    "movieclips",
     "objects",
     "scenes",
     "shape_keys",

@@ -125,6 +125,7 @@ class MixerPreferences(bpy.types.AddonPreferences):
     VRtist: bpy.props.StringProperty(
         name="VRtist", default=os.environ.get("VRTIST_EXE", "D:/unity/VRtist/Build/VRtist.exe"), subtype="FILE_PATH"
     )
+    VRtist_suffix: bpy.props.StringProperty(name="VRtist_suffix", default="_VRtist")
 
     data_directory: bpy.props.StringProperty(
         name="Data Directory", default=os.environ.get("MIXER_DATA_DIR", get_data_directory()), subtype="FILE_PATH"
@@ -143,10 +144,12 @@ class MixerPreferences(bpy.types.AddonPreferences):
     send_baked_meshes: bpy.props.BoolProperty(default=True)
 
     display_own_gizmos: bpy.props.BoolProperty(default=False, name="Display Own Gizmos")
-    display_frustums_gizmos: bpy.props.BoolProperty(default=True, name="Display Frustums Gizmos")
-    display_names_gizmos: bpy.props.BoolProperty(default=True, name="Display Name Gizmos")
     display_ids_gizmos: bpy.props.BoolProperty(default=False, name="Display ID Gizmos")
+
+    display_frustums_gizmos: bpy.props.BoolProperty(default=True, name="Display Frustums Gizmos")
+    display_frustums_names_gizmos: bpy.props.BoolProperty(default=True, name="Display Frustums User Names")
     display_selections_gizmos: bpy.props.BoolProperty(default=True, name="Display Selection Gizmos")
+    display_selections_names_gizmos: bpy.props.BoolProperty(default=True, name="Display Selection User Names")
 
     commands_send_interval: bpy.props.FloatProperty(
         name="Command Send Interval",

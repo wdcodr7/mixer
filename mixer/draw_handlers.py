@@ -152,7 +152,11 @@ def users_frustrum_draw():
 def users_frustum_name_draw():
     prefs = get_mixer_prefs()
 
-    if not prefs.display_names_gizmos or share_data.client.current_room is None:
+    if (
+        not prefs.display_frustums_gizmos
+        or not prefs.display_frustums_names_gizmos
+        or share_data.client.current_room is None
+    ):
         return
 
     def per_user_callback(user_dict):
@@ -243,7 +247,11 @@ def users_selection_draw():
 def users_selection_name_draw():
     prefs = get_mixer_prefs()
 
-    if not prefs.display_names_gizmos or share_data.client.current_room is None:
+    if (
+        not prefs.display_selections_gizmos
+        or not prefs.display_selections_names_gizmos
+        or share_data.client.current_room is None
+    ):
         return
 
     def per_user_callback(user_dict):
@@ -254,10 +262,14 @@ def users_selection_name_draw():
         bbox_corner = matrix @ Vector(local_bbox[1])
         draw_user_name(user_dict, bbox_corner)
 
-    users_selection_draw_iteration(per_user_callback, per_object_callback, collection_detail=False)
+    users_selection_draw_iteration(
+        per_user_callback, per_object_callback, collection_detail=False, draw_first_only=True
+    )
 
 
-def users_selection_draw_iteration(per_user_callback, per_object_callback, collection_detail=True):
+def users_selection_draw_iteration(
+    per_user_callback, per_object_callback, collection_detail=True, draw_first_only=False
+):
     if share_data.client is None:
         return
 
@@ -292,13 +304,15 @@ def users_selection_draw_iteration(per_user_callback, per_object_callback, colle
             parent_matrix = IDENTITY_MATRIX
 
             if obj.type == "EMPTY" and obj.instance_collection is not None:
+                collection = obj.instance_collection
                 if collection_detail:
-                    objects = obj.instance_collection.objects
+                    objects = collection.objects
                 else:
                     objects = []
-                parent_matrix = obj.matrix_world
-
-                per_object_callback(user_dict, obj, obj.matrix_world @ BBOX_SCALE_MATRIX, DEFAULT_BBOX)
+                parent_matrix = Matrix.Translation(-collection.instance_offset) @ obj.matrix_world
+                per_object_callback(user_dict, obj, parent_matrix @ BBOX_SCALE_MATRIX, DEFAULT_BBOX)
+                if draw_first_only:
+                    return
 
             for obj in objects:
                 bbox = obj.bound_box
@@ -308,6 +322,8 @@ def users_selection_draw_iteration(per_user_callback, per_object_callback, colle
                     bbox = DEFAULT_BBOX
 
                 per_object_callback(user_dict, obj, parent_matrix @ obj.matrix_world @ BBOX_SCALE_MATRIX, bbox)
+                if draw_first_only:
+                    return
 
 
 def draw_user_name(user_dict, coord_3d):

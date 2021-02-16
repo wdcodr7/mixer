@@ -1,5 +1,17 @@
 # 0.21.0 (wip)
 
+## Features
+
+- MovieClip: synchronization
+- TextCurve: synchronization (with builtin VectorFont only)
+- Mixer panel: simplify and make Gizmos settings more accessible
+- UI: can disable display of peer names on selection boxes in Mixer Gizmos preferences
+
+## Fixes
+
+- Libraries: synchronization error after using "duplicate linked" on an Object from a library
+- UI: selection box displayed with offset for instances of collections with instance_offset
+
 ## Breaking changes
 
 - require Blender 2.91.0

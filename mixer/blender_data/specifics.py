@@ -29,10 +29,10 @@ from __future__ import annotations
 import array
 import logging
 from pathlib import Path
-import traceback
 from typing import Any, Callable, cast, Dict, ItemsView, List, Optional, TYPE_CHECKING, Union
 
-from mixer.blender_data.proxy import ExternalFileFailed
+from mixer.blender_data.proxy import AddElementFailed, ExternalFileFailed
+
 
 import bpy
 import bpy.types as T  # noqa N812
@@ -302,20 +302,20 @@ def _(collection_name: str, proxy: DatablockProxy, context: Context) -> Optional
     return collection.new(name, data_datablock)
 
 
-@bpy_data_ctor.register("lights")  # type: ignore[no-redef]
-def _(collection_name: str, proxy: DatablockProxy, context: Context) -> Optional[T.ID]:
-    collection = getattr(bpy.data, collection_name)
-    name = proxy.data("name")
-    light_type = proxy.data("type")
-    light = collection.new(name, light_type)
-    return light
-
-
 @bpy_data_ctor.register("node_groups")  # type: ignore[no-redef]
 def _(collection_name: str, proxy: DatablockProxy, context: Context) -> Optional[T.ID]:
     collection = getattr(bpy.data, collection_name)
     name = proxy.data("name")
     type_ = node_tree_type[proxy.data("type")]
+    return collection.new(name, type_)
+
+
+@bpy_data_ctor.register("lights")
+@bpy_data_ctor.register("textures")  # type: ignore[no-redef]
+def _(collection_name: str, proxy: DatablockProxy, context: Context) -> Optional[T.ID]:
+    collection = getattr(bpy.data, collection_name)
+    name = proxy.data("name")
+    type_ = proxy.data("type")
     return collection.new(name, type_)
 
 
@@ -458,6 +458,9 @@ def pre_save_struct(proxy: StructProxy, target: T.bpy_struct):
     create_clear_animation_data(target, proxy)
 
 
+_morphable_types = (T.Light, T.Texture)
+
+
 def pre_save_datablock(proxy: DatablockProxy, target: T.ID, context: Context) -> T.ID:
     """Process attributes that must be saved first and return a possibly updated reference to the target"""
 
@@ -491,13 +494,16 @@ def pre_save_datablock(proxy: DatablockProxy, target: T.ID, context: Context) ->
                 target.sequence_editor_create()
             elif isinstance(sequence_editor, NonePtrProxy) and target.sequence_editor is not None:
                 target.sequence_editor_clear()
-    elif isinstance(target, T.Light):
-        # required first to have access to new light type attributes
-        light_type = proxy.data("type")
-        if light_type is not None and light_type != target.type:
-            target.type = light_type
+    elif isinstance(target, _morphable_types):
+        # required first to have access to new datablock attributes
+        type_ = proxy.data("type")
+        if type_ is not None and type_ != target.type:
+            target.type = type_
             # must reload the reference
-            target = proxy.target(context)
+            target = target.type_recast()
+            uuid = proxy.mixer_uuid
+            context.proxy_state.remove_datablock(uuid)
+            context.proxy_state.add_datablock(uuid, target)
     elif isinstance(target, T.Action):
         groups = proxy.data("groups")
         if groups:
@@ -524,20 +530,15 @@ def add_element(collection: T.bpy_prop_collection, proxy: Proxy, index: int, con
 
 
 @add_element.register_default()
-def _add_element_default(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+def _add_element_default(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     try:
-        return collection.add()
-    except Exception as e:
-        logger.info(f"add_element (default) exception for {collection} ...")
-        logger.info(f"... {e!r}")
-
-    # try our best
-    new_or_add = getattr(collection, "new", None)
-    if new_or_add is None:
-        new_or_add = getattr(collection, "add", None)
-    if new_or_add is None:
-        logger.error(f"Not implemented: add_element for {collection} ...")
-        return None
+        new_or_add = collection.new
+    except AttributeError:
+        try:
+            new_or_add = collection.add
+        except AttributeError:
+            logger.error(f"add_element: not implemented for {context.visit_state.display_path()} ...")
+            raise AddElementFailed from None
 
     try:
         return new_or_add()
@@ -545,18 +546,17 @@ def _add_element_default(collection: T.bpy_prop_collection, proxy: Proxy, index:
         try:
             key = proxy.data("name")
             return new_or_add(key)
-        except Exception:
-            logger.error(f"Not implemented: add_element for type {type(collection)} for {collection}[{key}] ...")
-            for s in traceback.format_exc().splitlines():
-                logger.error(f"...{s}")
-    return None
+        except Exception as e:
+            logger.error(f"add_element: not implemented for {context.visit_state.display_path()} ...")
+            logger.error(f"... {e!r}")
+            raise AddElementFailed from None
 
 
 @add_element.register(T.NodeInputs)
 @add_element.register(T.NodeOutputs)
 @add_element.register(T.NodeTreeInputs)
-@add_element.register(T.NodeTreeOutputs)
-def _add_element_type_name(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.NodeTreeOutputs)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     socket_type = proxy.data("type")
     name = proxy.data("name")
     return collection.new(socket_type, name)
@@ -564,8 +564,8 @@ def _add_element_type_name(collection: T.bpy_prop_collection, proxy: Proxy, inde
 
 @add_element.register(T.ObjectModifiers)
 @add_element.register(T.ObjectGpencilModifiers)
-@add_element.register(T.SequenceModifiers)
-def _add_element_name_type(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.SequenceModifiers)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     name = proxy.data("name")
     type_ = proxy.data("type")
     return collection.new(name, type_)
@@ -573,34 +573,40 @@ def _add_element_name_type(collection: T.bpy_prop_collection, proxy: Proxy, inde
 
 @add_element.register(T.CurveSplines)
 @add_element.register(T.FCurveModifiers)
-@add_element.register(T.ObjectConstraints)
-def _add_element_type(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.ObjectConstraints)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     type_ = proxy.data("type")
     return collection.new(type_)
 
 
 @add_element.register(T.SplinePoints)
-@add_element.register(T.SplineBezierPoints)
-def _add_element_one(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.SplineBezierPoints)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     return collection.add(1)
 
 
-@add_element.register(T.MetaBallElements)
-def _add_element_type_eq(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.MetaBallElements)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     type_ = proxy.data("type")
     return collection.new(type=type_)
 
 
-@add_element.register(T.CurveMapPoints)
-def _add_element_location(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.CurveMapPoints)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     location = proxy.data("location")
     return collection.new(location[0], location[1])
 
 
-@add_element.register(T.Nodes)
-def _add_element_idname(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.Nodes)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     node_type = proxy.data("bl_idname")
-    return collection.new(node_type)
+    try:
+        return collection.new(node_type)
+    except RuntimeError as e:
+        name = proxy.data("name")
+        logger.error(f"add_element failed for node {name!r} into {context.visit_state.display_path()} ...")
+        logger.error(f"... {e!r}")
+        raise AddElementFailed from None
 
 
 @add_element.register(T.ActionGroups)
@@ -608,33 +614,33 @@ def _add_element_idname(collection: T.bpy_prop_collection, proxy: Proxy, index: 
 @add_element.register(T.LoopColors)
 @add_element.register(T.TimelineMarkers)
 @add_element.register(T.UVLoopLayers)
-@add_element.register(T.VertexGroups)
-def _add_element_name_eq(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.VertexGroups)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     name = proxy.data("name")
     return collection.new(name=name)
 
 
-@add_element.register(T.GreasePencilLayers)
-def _add_element_info(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.GreasePencilLayers)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     name = proxy.data("info")
     return collection.new(name)
 
 
-@add_element.register(T.GPencilFrames)
-def _add_element_frame_number(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.GPencilFrames)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     frame_number = proxy.data("frame_number")
     return collection.new(frame_number)
 
 
-@add_element.register(T.KeyingSets)
-def _add_element_bl_label(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.KeyingSets)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     label = proxy.data("bl_label")
     idname = proxy.data("bl_idname")
     return collection.new(name=label, idname=idname)
 
 
-@add_element.register(T.KeyingSetPaths)
-def _add_element_keyingset(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.KeyingSetPaths)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     # TODO current implementation fails
     # All keying sets paths have an empty name, and insertion with add() fails
     # with an empty name
@@ -652,16 +658,16 @@ def _add_element_keyingset(collection: T.bpy_prop_collection, proxy: Proxy, inde
     )
 
 
-@add_element.register(T.ActionFCurves)
 @add_element.register(T.AnimDataDrivers)
-def _add_element_action_curve(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.ActionFCurves)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     data_path = proxy.data("data_path")
     array_index = proxy.data("array_index")
     return collection.new(data_path, index=array_index)
 
 
-@add_element.register(T.FCurveKeyframePoints)
-def _add_element_add_one(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.FCurveKeyframePoints)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     return collection.add(1)
 
 
@@ -669,8 +675,8 @@ _non_effect_sequences = {"IMAGE", "SOUND", "META", "SCENE", "MOVIE", "MOVIECLIP"
 _effect_sequences = set(T.EffectSequence.bl_rna.properties["type"].enum_items.keys()) - _non_effect_sequences
 
 
-@add_element.register(T.Sequences)
-def _add_element_sequence(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.Sequences)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     type_name = proxy.data("type")
     name = proxy.data("name")
     channel = proxy.data("channel")
@@ -700,14 +706,14 @@ def _add_element_sequence(collection: T.bpy_prop_collection, proxy: Proxy, index
     return None
 
 
-@add_element.register(T.IDMaterials)
-def _add_element_material_ref(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.IDMaterials)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     material_datablock = proxy.target(context)
     return collection.append(material_datablock)
 
 
-@add_element.register(T.ColorRampElements)
-def _add_element_position(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context):
+@add_element.register(T.ColorRampElements)  # type: ignore[no-redef]
+def _(collection: T.bpy_prop_collection, proxy: Proxy, index: int, context: Context) -> T.bpy_struct:
     position = proxy.data("position")
     return collection.new(position)
 
@@ -823,7 +829,7 @@ def _(collection: T.bpy_prop_collection, sequence: List[DatablockProxy], collect
     )
 
 
-@diff_must_replace.register(T.GreasePencilLayers)
+@diff_must_replace.register(T.GreasePencilLayers)  # type: ignore[no-redef]
 def _(collection: T.bpy_prop_collection, sequence: List[DatablockProxy], collection_property: T.Property) -> bool:
     # Name mismatch (in info property). This may happen during layer swap and cause unsolicited rename
     # Easier to solve with full replace
@@ -886,7 +892,7 @@ def clear_from(collection: T.bpy_prop_collection, sequence: List[DatablockProxy]
 
 @clear_from.register(T.ObjectModifiers)
 @clear_from.register(T.ObjectGpencilModifiers)
-@clear_from.register(T.SequenceModifiers)
+@clear_from.register(T.SequenceModifiers)  # type: ignore[no-redef]
 def _(collection: T.bpy_prop_collection, sequence: List[DatablockProxy]) -> int:
     """clear_from implementation for collections of items that cannot be updated if their "type" attribute changes."""
     for i, (proxy, item) in enumerate(zip(sequence, collection)):

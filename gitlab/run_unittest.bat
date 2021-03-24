@@ -1,3 +1,7 @@
+REM sometimes a previous test may be stuck from another Gitlab instance
+tasklist /FI "IMAGENAME EQ blender.exe"
+taskkill /IM blender.exe /F /T
+
 tscon 0 /dest:console
 tscon 1 /dest:console
 tscon 2 /dest:console
